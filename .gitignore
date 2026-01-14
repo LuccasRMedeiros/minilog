@@ -1,0 +1,4 @@
+build/
+libminilog.a
+tags
+compile_options.json

@@ -9,11 +9,11 @@
 
 int init(const char *dir, const char *file)
 {
-	int dftfd = 1; //stdout
+	int logfd = 1; //stdout
+	int dirfd = 0;
 	struct stat statbuf;
-	char *fullname = NULL;
 
-	if (stat(dir, &statbuf) == -1)
+	if (stat(dir, &statbuf) < 0)
 	{
 		switch (errno)
 		{
@@ -28,25 +28,38 @@ int init(const char *dir, const char *file)
 			fprintf(stderr, "Kernel is out of memory!\n");
 			return NO_MEMORY;
 		default:
-			if (mkdir(dir, 0775) == -1)
+			if (mkdir(dir, 0775) < 0)
 			{
 				fprintf(stderr, "Failed to create %s\n", dir);
 				return CANNOT_MKDIR;
 			}
 		}
 	}
-	fullname = calloc(strlen(dir) + strlen(file) + 2, sizeof (char));
-	if (fullname == NULL)
+	dirfd = open(dir, O_RDONLY|O_DIRECTORY);
+	if (dirfd < 0)
 	{
-		fprintf(stderr, "No memory for full name buffer\n");
-		return CANNOT_NAME;
+		fprintf(stderr, "%s is unreachable, error %i\n", dir, errno);
+		return CANNOT_REACH;
 	}
-	strcpy(fullname, dir);
-	strcat(fullname, "/");
-	strcat(fullname, file);
-	if (open(fullname, O_CREAT|O_APPEND, 0666) == -1)
+	logfd = openat(dirfd, file, O_CREAT|O_APPEND, 0666);
+	if (logfd < 0)
 	{
 		fprintf(stderr, "Failed to open %s, error %i\n", file, errno);
 		return CANNOT_OPEN;
 	}
+	if (dup2(logfd, STDOUT_FILENO) < 0)
+	{
+		fprintf(
+				stderr,
+				"Failed to redirect output to file %s/%s, error %i\n",
+				dir,
+				file,
+				errno);
+		close(dirfd);
+		close(logfd);
+		return CANNOT_REDIRECT;
+	}
+	close(dirfd);
+	close(logfd);
+	return SUCCESS;
 }
